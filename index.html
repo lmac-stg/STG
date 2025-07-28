@@ -47,13 +47,9 @@
     // ... rotation logic ...
     animationFrame = requestAnimationFrame(rotateCamera); 
 }
-
     map.on('click', () => {
     cancelAnimationFrame(animationFrame); // Stop the rotation animation
 });
-
-// Optionally disable user-controlled drag rotation:
-map.dragRotate.disable();
 
     
       const layers = map.getStyle().layers;
