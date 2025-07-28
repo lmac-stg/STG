@@ -51,7 +51,7 @@
               'source': 'openmaptiles',
               'source-layer': 'building',
               'type': 'fill-extrusion',
-              'minzoom': 12,
+              'minzoom': 10,
               'filter': ['!=', ['get', 'hide_3d'], true],
               'paint': {
                   'fill-extrusion-color': [
@@ -63,13 +63,13 @@
                       'interpolate',
                       ['linear'],
                       ['zoom'],
-                      12,
+                      10,
                       0,
-                      16,
+                      12,
                       ['get', 'render_height']
                   ],
                   'fill-extrusion-base': ['case',
-                      ['>=', ['get', 'zoom'], 16],
+                      ['>=', ['get', 'zoom'], 12],
                       ['get', 'render_min_height'], 0
                   ]
               }
