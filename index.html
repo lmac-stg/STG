@@ -39,6 +39,27 @@
               break;
           }
       }
+    function rotateCamera(timestamp) {
+        // clamp the rotation between 0 -360 degrees
+        // Divide timestamp by 100 to slow rotation to ~10 degrees / sec
+        map.rotateTo((timestamp / 100) % 360, {duration: 0});
+        // Request the next frame of the animation.
+        requestAnimationFrame(rotateCamera);
+    }
+
+    map.on('load', () => {
+        // Start the animation.
+        rotateCamera(0);
+
+        // Add 3d buildings and remove label layers to enhance the map
+        const layers = map.getStyle().layers;
+        for (let i = 0; i < layers.length; i++) {
+            if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
+                // remove text labels
+                map.removeLayer(layers[i].id);
+            }
+        }
+
 
       map.addSource('openmaptiles', {
           url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
