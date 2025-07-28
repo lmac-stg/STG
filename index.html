@@ -1,19 +1,85 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<script type="module" src="https://js.arcgis.com/embeddable-components/4.33/arcgis-embeddable-components.esm.js"></script>
-  <title>My GIS Projects</title>
+  <title>Display buildings in 3D</title>
+  <meta property="og:description" content="Use extrusions to display buildings' height in 3D." />
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css' />
+  <script src='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js'></script>
+  <style>
+      body { margin: 0; padding: 0; }
+      html, body, #map { height: 100%; }
+  </style>
 </head>
 <body>
-   <arcgis-embedded-map style="height:600px;width:1000px;" item-id="f638f053add64557a6dfcab617aafb12" theme="dark" bookmarks-enabled center="-97.74126399933533,30.262914216820697"scale="36111.909643" portal-url="https://lmachaj.maps.arcgis.com" ></arcgis-embedded-map>
-  <iframe src="https://lmachaj.maps.arcgis.com/apps/instant/3dviewer/index.html?appid=528d529be5214920950b9f51b7c2064f" width="1000" height="500" frameborder="0" style="border:0" allowfullscreen>iFrames are not supported on this page.</iframe>
+<div id="map"></div>
+<script>
+  const MAPTILER_KEY = 'gkgjAgVis1iYA7Dh8b1D';
+  const map = new maplibregl.Map({
+      style: `https://api.maptiler.com/maps/basic-v2/style.json?key=${MAPTILER_KEY}`,
+      center: [-74.0066, 40.7135],
+      zoom: 15.5,
+      pitch: 45,
+      bearing: -17.6,
+      container: 'map',
+      canvasContextAttributes: {antialias: true}
+  });
 
+  // The 'building' layer in the streets vector source contains building-height
+  // data from OpenStreetMap.
+  map.on('load', () => {
+      // Insert the layer beneath any symbol layer.
+      const layers = map.getStyle().layers;
+
+      let labelLayerId;
+      for (let i = 0; i < layers.length; i++) {
+          if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
+              labelLayerId = layers[i].id;
+              break;
+          }
+      }
+
+      map.addSource('openmaptiles', {
+          url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
+          type: 'vector',
+      });
+
+      map.addLayer(
+          {
+              'id': '3d-buildings',
+              'source': 'openmaptiles',
+              'source-layer': 'building',
+              'type': 'fill-extrusion',
+              'minzoom': 15,
+              'filter': ['!=', ['get', 'hide_3d'], true],
+              'paint': {
+                  'fill-extrusion-color': [
+                      'interpolate',
+                      ['linear'],
+                      ['get', 'render_height'], 0, 'lightgray', 200, 'royalblue', 400, 'lightblue'
+                  ],
+                  'fill-extrusion-height': [
+                      'interpolate',
+                      ['linear'],
+                      ['zoom'],
+                      15,
+                      0,
+                      16,
+                      ['get', 'render_height']
+                  ],
+                  'fill-extrusion-base': ['case',
+                      ['>=', ['get', 'zoom'], 16],
+                      ['get', 'render_min_height'], 0
+                  ]
+              }
+          },
+          labelLayerId
+      );
+  });
+</script>
 </body>
 </html>
-
-
-
-
 
 
 
