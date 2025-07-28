@@ -18,13 +18,20 @@
   const MAPTILER_KEY = 'gkgjAgVis1iYA7Dh8b1D';
   const map = new maplibregl.Map({
       style: `https://api.maptiler.com/maps/basic-v2/style.json?key=${MAPTILER_KEY}`,
-      center: [-74.0066, 40.7135],
+      center: [30.2711286, -97.7436995],
       zoom: 15.5,
       pitch: 45,
       bearing: -17.6,
       container: 'map',
       canvasContextAttributes: {antialias: true}
   });
+   function rotateCamera(timestamp) {
+        // clamp the rotation between 0 -360 degrees
+        // Divide timestamp by 100 to slow rotation to ~10 degrees / sec
+        map.rotateTo((timestamp / 100) % 360, {duration: 0});
+        // Request the next frame of the animation.
+        requestAnimationFrame(rotateCamera);
+    }
 
   // The 'building' layer in the streets vector source contains building-height
   // data from OpenStreetMap.
