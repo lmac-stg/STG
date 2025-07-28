@@ -17,9 +17,9 @@
 <script>
   const MAPTILER_KEY = 'gkgjAgVis1iYA7Dh8b1D';
   const map = new maplibregl.Map({
-      style: `https://api.maptiler.com/maps/dataviz/style.json?key=gkgjAgVis1iYA7Dh8b1D`,
+      style: `https://api.maptiler.com/maps/toner-v2/style.json?key=gkgjAgVis1iYA7Dh8b1D`,
       center: [-97.7431, 30.2672],
-      zoom: 12,
+      zoom: 15,
       pitch: 45,
       bearing: -17.6,
       container: 'map',
@@ -29,7 +29,7 @@
    function rotateCamera(timestamp) {
         // clamp the rotation between 0 -360 degrees
         // Divide timestamp by 100 to slow rotation to ~10 degrees / sec
-        map.rotateTo((timestamp / 100) % 360, {duration: 0});
+        map.rotateTo((timestamp / 100) % 360, {duration: 3});
         // Request the next frame of the animation.
         requestAnimationFrame(rotateCamera);
     }
