@@ -10,73 +10,215 @@
   <style>
       body { margin: 0; padding: 0; }
       html, body, #map { height: 100%; }
+
+    #controls {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translate(-50%);
+        z-index: 1;
+        display: flex;
+        gap: 10px;
+    }
+    .fly-btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 3px;
+        font-size: 14px;
+        color: #fff;
+        background: #ee8a65;
+        cursor: pointer;
+    }
   </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="controls">
+    <button id="fly-nashville" class="fly-btn">Nashville</button>
+    <button id="fly-austin" class="fly-btn">Austin</button>
+</div>
+
 <script>
   const MAPTILER_KEY = 'gkgjAgVis1iYA7Dh8b1D';
+  const austinCenter = [-97.7431, 30.2672];
+  const nashvilleCenter = [-86.7816, 36.1627];
+
   const map = new maplibregl.Map({
-      style: `https://api.maptiler.com/maps/basic-v2/style.json?key=${MAPTILER_KEY}`,
-      center: [-97.7431, 30.2672],
-      zoom: 13,
-      pitch: 45,
-      bearing: -17.6,
+      style: `https://api.maptiler.com/maps/019856a5-2440-7965-8008-74c6248d4eb1/style.json?key=gkgjAgVis1iYA7Dh8b1D`,
+      center: austinCenter,
+      zoom: 15,
+      pitch: 70,
+      bearing: 60,
       container: 'map',
       canvasContextAttributes: {antialias: true}
   });
 
+let animationFrameId;
+let restartTimeout;
+
+function rotateCamera(timestamp) {
+    map.rotateTo((timestamp / 100) % 360, {duration: 0});
+    animationFrameId = requestAnimationFrame(rotateCamera);
+}
+
+function stopRotation() {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    if (restartTimeout) {
+        clearTimeout(restartTimeout);
+    }
+
+    // Remove listeners to avoid stacking
+    map.getCanvas().removeEventListener('mousedown', stopRotation);
+    map.getCanvas().removeEventListener('touchstart', stopRotation);
+    map.getCanvas().removeEventListener('wheel', stopRotation);
+
+    // Resume rotation and re-add listeners after 10 seconds
+    restartTimeout = setTimeout(() => {
+        rotateCamera(performance.now());
+        map.getCanvas().addEventListener('mousedown', stopRotation);
+        map.getCanvas().addEventListener('touchstart', stopRotation);
+        map.getCanvas().addEventListener('wheel', stopRotation);
+    }, 10000);
+}
+
   // The 'building' layer in the streets vector source contains building-height
   // data from OpenStreetMap.
   map.on('load', () => {
-      // Insert the layer beneath any symbol layer.
-      const layers = map.getStyle().layers;
 
-      let labelLayerId;
-      for (let i = 0; i < layers.length; i++) {
-          if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
-              labelLayerId = layers[i].id;
-              break;
-          }
-      }
+    // Start the animation.
+    rotateCamera(0);
 
-      map.addSource('openmaptiles', {
-          url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
-          type: 'vector',
-      });
+    map.getCanvas().addEventListener('mousedown', stopRotation);
+    map.getCanvas().addEventListener('touchstart', stopRotation);
+    map.getCanvas().addEventListener('wheel', stopRotation);
 
-      map.addLayer(
-          {
-              'id': '3d-buildings',
-              'source': 'openmaptiles',
-              'source-layer': 'building',
-              'type': 'fill-extrusion',
-              'minzoom': 15,
-              'filter': ['!=', ['get', 'hide_3d'], true],
-              'paint': {
-                  'fill-extrusion-color': [
-                      'interpolate',
-                      ['linear'],
-                      ['get', 'render_height'], 0, 'lightgray', 200, 'royalblue', 400, 'lightblue'
-                  ],
-                  'fill-extrusion-height': [
-                      'interpolate',
-                      ['linear'],
-                      ['zoom'],
-                      15,
-                      0,
-                      16,
-                      ['get', 'render_height']
-                  ],
-                  'fill-extrusion-base': ['case',
-                      ['>=', ['get', 'zoom'], 16],
-                      ['get', 'render_min_height'], 0
-                  ]
-              }
-          },
-          labelLayerId
-      );
+    // Insert the layer beneath any symbol layer.
+    const layers = map.getStyle().layers;
+
+    let labelLayerId;
+    for (let i = 0; i < layers.length; i++) {
+        if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
+            labelLayerId = layers[i].id;
+            break;
+        }
+    }
+
+    map.addSource('openmaptiles', {
+        url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
+        type: 'vector',
+    });
+
+    map.addLayer(
+        {
+            'id': '3d-buildings',
+            'source': 'openmaptiles',
+            'source-layer': 'building',
+            'type': 'fill-extrusion',
+            'minzoom': 14,
+            'filter': ['!=', ['get', 'hide_3d'], true],
+            'paint': {
+                'fill-extrusion-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'render_height'], 0, 'lightgray', 200, 'lightgray', 400, 'lightgray'
+                ],
+                'fill-extrusion-height': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    13,
+                    0,
+                    14,
+                    ['get', 'render_height']
+                ],
+                'fill-extrusion-base': ['case',
+                    ['>=', ['get', 'zoom'], 13],
+                    ['get', 'render_min_height'], 0
+                ],
+                'fill-extrusion-opacity': 0.85 // 15% transparent
+            }
+        },
+        labelLayerId
+    );
+
+    // Add popup on click for buildings
+    map.on('click', '3d-buildings', (e) => {
+        const feature = e.features[0];
+        const coordinates = e.lngLat;
+        const height = feature.properties.render_height || 'N/A';
+        const minHeight = feature.properties.render_min_height || 'N/A';
+
+        new maplibregl.Popup()
+            .setLngLat(coordinates)
+            .setHTML(
+                `<strong>Building Info</strong><br>
+                Height: ${height} meters<br>
+                Min Height: ${minHeight} meters`
+            )
+            .addTo(map);
+    });
+
+    document.getElementById('fly-nashville').addEventListener('click', () => {
+        stopRotation(); // Stop rotation and start/restart timer
+        map.flyTo({
+            center: nashvilleCenter,
+            zoom: 15,
+            pitch: 70,
+            bearing: 60,
+            essential: true
+        });
+    });
+
+    document.getElementById('fly-austin').addEventListener('click', () => {
+        stopRotation(); // Stop rotation and start/restart timer
+        map.flyTo({
+            center: austinCenter,
+            zoom: 15,
+            pitch: 70,
+            bearing: 60,
+            essential: true
+        });
+    });
+
+    map.loadImage('https://maplibre.org/maplibre-gl-js-docs/assets/marker-15.png', (error, image) => {
+        if (error) throw error;
+        if (!map.hasImage('marker-15')) {
+            map.addImage('marker-15', image);
+        }
+
+        // Now fetch and add your GeoJSON layer
+        fetch('/your-backend-endpoint')
+            .then(response => response.json())
+            .then(data => {
+                map.addSource('my-points', {
+                    type: 'geojson',
+                    data: data
+                });
+                map.addLayer({
+                    "id": "my-points-layer",
+                    "type": "symbol",
+                    "source": "my-points",
+                    "layout": {
+                        "icon-image": "marker-15",
+                        "icon-size": 2.5,
+                        "icon-anchor": "bottom",
+                        "icon-offset": [0, -30],
+                        "text-field": ["get", "Name"],
+                        "text-font": ["Open Sans Bold"],
+                        "text-size": 16,
+                        "text-offset": [0, -2.5],
+                        "text-anchor": "bottom"
+                    }
+                });
+            });
+    });
   });
+
+
+  
 </script>
 </body>
 </html>
