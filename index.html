@@ -72,9 +72,10 @@
         .subtitle {
             font-size: 12px;
             color: #666;
-            font-weight: normal;
+            font-weight: bold;
             line-height: 1.2;
             margin: 0;
+            margin-top: 6px;
         }
         
         .stg-logo {
@@ -95,7 +96,7 @@
             -webkit-backdrop-filter: blur(10px);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: none;
             max-width: 400px;
             width: 380px;
             max-height: 70vh;
@@ -363,26 +364,12 @@
             display: block;
         }
 
-        /* Zoom level display for debugging */
-        .zoom-display {
-            position: absolute;
-            top: 110px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-            font-weight: bold;
-            z-index: 1000;
-            pointer-events: none;
-        }
+
     </style>
 </head>
 <body>
 <div class="vignette"></div>
-<div class="zoom-display" id="zoom-display">Zoom: 15.5</div>
+
 <div class="map-title">
     <img src="https://lmac-stg.github.io/STG/images/Logo2.png" alt="STG Logo" class="stg-logo">
     <div class="title-content">
@@ -402,14 +389,16 @@
         <button id="austin-btn" class="fly-button austin-btn">Austin ▼</button>
         <div id="austin-menu" class="dropdown-menu">
             <div class="dropdown-item" data-action="austin-downtown">Downtown</div>
-            <div class="dropdown-item" data-action="austin-greater">Greater Region</div>
+            <div class="dropdown-item" data-action="austin-region">Region</div>
+            <div class="dropdown-item" data-action="austin-office">Office</div>
         </div>
     </div>
     <div class="nav-dropdown">
         <button id="nashville-btn" class="fly-button nashville-btn">Nashville ▼</button>
         <div id="nashville-menu" class="dropdown-menu">
             <div class="dropdown-item" data-action="nashville-downtown">Downtown</div>
-            <div class="dropdown-item" data-action="nashville-greater">Greater Region</div>
+            <div class="dropdown-item" data-action="nashville-region">Region</div>
+            <div class="dropdown-item" data-action="nashville-office">Office</div>
         </div>
     </div>
 </div>
@@ -794,16 +783,18 @@
     function populateFeatureList() {
         const featureListContent = document.getElementById('feature-list');
         
-        // Sort features by city (Austin first, then Nashville)
-        const sortedFeatures = geojsonData.features.sort((a, b) => {
-            const cityA = a.geometry.coordinates[0] > -90 ? 'Nashville' : 'Austin';
-            const cityB = b.geometry.coordinates[0] > -90 ? 'Nashville' : 'Austin';
-            
-            if (cityA !== cityB) {
-                return cityA === 'Austin' ? -1 : 1;
-            }
-            return a.properties.Name.localeCompare(b.properties.Name);
-        });
+        // Filter out STG offices (STG === 2) and sort features by city (Austin first, then Nashville)
+        const sortedFeatures = geojsonData.features
+            .filter(feature => feature.properties.STG !== 2) // Exclude STG offices
+            .sort((a, b) => {
+                const cityA = a.geometry.coordinates[0] > -90 ? 'Nashville' : 'Austin';
+                const cityB = b.geometry.coordinates[0] > -90 ? 'Nashville' : 'Austin';
+                
+                if (cityA !== cityB) {
+                    return cityA === 'Austin' ? -1 : 1;
+                }
+                return a.properties.Name.localeCompare(b.properties.Name);
+            });
         
         sortedFeatures.forEach(feature => {
             const props = feature.properties;
@@ -1292,7 +1283,7 @@
                         duration: 2000
                     });
                     break;
-                case 'austin-greater':
+                case 'austin-region':
                     rotationDisabled = true; // Disable rotation for greater region view
                     map.flyTo({
                         center: [-97.747498, 30.333448], // Center between Austin and Round Rock
@@ -1302,6 +1293,26 @@
                         essential: true,
                         duration: 2000
                     });
+                    break;
+                case 'austin-office':
+                    // Find Austin office and show popup
+                    const austinOffice = geojsonData.features.find(f => f.properties.Name === 'STG Austin Office');
+                    if (austinOffice) {
+                        const coordinates = austinOffice.geometry.coordinates;
+                        rotationDisabled = false;
+                        showAnimatedPoint(coordinates, true);
+                        map.flyTo({
+                            center: coordinates,
+                            zoom: 18,
+                            pitch: 60,
+                            bearing: 0,
+                            essential: true,
+                            duration: 2000
+                        });
+                        setTimeout(() => {
+                            createCustomPopup(austinOffice.properties, true);
+                        }, 500);
+                    }
                     break;
                 case 'nashville-downtown':
                     rotationDisabled = false; // Resume rotation for downtown view
@@ -1314,7 +1325,7 @@
                         duration: 2000
                     });
                     break;
-                case 'nashville-greater':
+                case 'nashville-region':
                     rotationDisabled = true; // Disable rotation for greater region view
                     map.flyTo({
                         center: [-86.7816, 36.1627], // Nashville center (adjust if needed)
@@ -1324,6 +1335,26 @@
                         essential: true,
                         duration: 2000
                     });
+                    break;
+                case 'nashville-office':
+                    // Find Nashville office and show popup
+                    const nashvilleOffice = geojsonData.features.find(f => f.properties.Name === 'STG Nashville Office');
+                    if (nashvilleOffice) {
+                        const coordinates = nashvilleOffice.geometry.coordinates;
+                        rotationDisabled = false;
+                        showAnimatedPoint(coordinates, true);
+                        map.flyTo({
+                            center: coordinates,
+                            zoom: 18,
+                            pitch: 60,
+                            bearing: 0,
+                            essential: true,
+                            duration: 2000
+                        });
+                        setTimeout(() => {
+                            createCustomPopup(nashvilleOffice.properties, true);
+                        }, 500);
+                    }
                     break;
             }
             
@@ -1416,26 +1447,11 @@
         showCompass: true
     }));
 
-    // Update zoom display in real-time
-    function updateZoomDisplay() {
-        const zoomDisplay = document.getElementById('zoom-display');
-        if (zoomDisplay) {
-            zoomDisplay.textContent = `Zoom: ${map.getZoom().toFixed(2)}`;
-        }
-    }
-
-    // Add zoom event listener to update display
-    map.on('zoom', updateZoomDisplay);
-    map.on('zoomend', updateZoomDisplay);
-
     // Start the initial timer when map loads
     map.on('load', () => {
         // Start the rotation loop immediately
         requestAnimationFrame(rotateCamera);
         resetInactivityTimer();
-        
-        // Update zoom display initially
-        updateZoomDisplay();
         
         // Collapse attribution control by default with multiple attempts
         const collapseAttribution = () => {
