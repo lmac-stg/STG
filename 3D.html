@@ -1,6 +1,331 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+    <title>Add a 3D model using three.js</title>
+    <meta property="og:description" content="Use a custom style layer with three.js to add a 3D model to the map." />
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css' />
+    <script src='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js'></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        html, body, #map { height: 100%; }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 300px;
+        }
+        
+        .control-group {
+            margin-bottom: 10px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
+        .value-display {
+            font-size: 10px;
+            color: #666;
+        }
+    </style>
+</head>
 <body>
-<iframe src="https://lmachaj.maps.arcgis.com/apps/instant/3dviewer/index.html?appid=528d529be5214920950b9f51b7c2064f" width="400" height="600" frameborder="0" style="border:0" allowfullscreen>iFrames are not supported on this page.</iframe>
+<script type="importmap">
+    {
+        "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+        }
+    }
+</script>
+<div id="map"></div>
+<div class="controls">
+    <div class="control-group">
+        <label>Position</label>
+        <input type="range" id="posX" min="-0.00002" max="0.00002" step="0.0000001" value="0">
+        <div class="value-display">X: <span id="posXValue">0</span></div>
+        <input type="range" id="posY" min="-0.00002" max="0.00002" step="0.0000001" value="0">
+        <div class="value-display">Y: <span id="posYValue">0</span></div>
+        <input type="range" id="posZ" min="-0.00001" max="0.00001" step="0.0000001" value="0">
+        <div class="value-display">Z: <span id="posZValue">0</span></div>
+    </div>
+    
+    <div class="control-group">
+        <label>Rotation</label>
+        <input type="range" id="rotX" min="0" max="6.28" step="0.01" value="1.57">
+        <div class="value-display">X: <span id="rotXValue">1.57</span></div>
+        <input type="range" id="rotY" min="0" max="6.28" step="0.01" value="0">
+        <div class="value-display">Y: <span id="rotYValue">0</span></div>
+        <input type="range" id="rotZ" min="0" max="6.28" step="0.01" value="0">
+        <div class="value-display">Z: <span id="rotZValue">0</span></div>
+    </div>
+    
+    <div class="control-group">
+        <label>Scale</label>
+        <input type="range" id="scale" min="500" max="5000" step="100" value="2000">
+        <div class="value-display">Scale: <span id="scaleValue">2000</span></div>
+    </div>
+    
+    <button onclick="copyValues()">Copy Values to Console</button>
+</div>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const MAPTILER_KEY = 'get_your_own_OpIi9ZULNHzrESv6T2vL';
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: `https://api.maptiler.com/maps/basic-v2/style.json?key=${MAPTILER_KEY}`,
+        zoom: 18,
+        center: [-97.7522, 30.2672],
+        pitch: 60,
+        canvasContextAttributes: {antialias: true} // create the gl context with MSAA antialiasing, so custom layers are antialiased
+    });
+
+    // parameters to ensure the model is georeferenced correctly on the map
+    const modelOrigin = [-97.7522, 30.2672];
+    const modelAltitude = 0;
+    const modelRotate = [Math.PI / 2, 0, 0];
+
+    // Dynamic transform values that can be adjusted
+    let dynamicTransform = {
+        posX: 0,
+        posY: 0,
+        posZ: 0,
+        rotX: Math.PI / 2,
+        rotY: 0,
+        rotZ: 0,
+        scale: 2000
+    };
+
+    const modelAsMercatorCoordinate = maplibregl.MercatorCoordinate.fromLngLat(
+        modelOrigin,
+        modelAltitude
+    );
+
+    // Function to get current model transform
+    function getModelTransform() {
+        return {
+            translateX: modelAsMercatorCoordinate.x + dynamicTransform.posX,
+            translateY: modelAsMercatorCoordinate.y + dynamicTransform.posY,
+            translateZ: modelAsMercatorCoordinate.z + dynamicTransform.posZ,
+            rotateX: dynamicTransform.rotX,
+            rotateY: dynamicTransform.rotY,
+            rotateZ: dynamicTransform.rotZ,
+            scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits() * dynamicTransform.scale
+        };
+    }
+
+
+    // configuration of the custom layer for a 3D model per the CustomLayerInterface
+    const customLayer = {
+        id: '3d-model',
+        type: 'custom',
+        renderingMode: '3d',
+        onAdd (map, gl) {
+            this.camera = new THREE.Camera();
+            this.scene = new THREE.Scene();
+
+            // create two three.js lights to illuminate the model
+            const directionalLight = new THREE.DirectionalLight(0xffffff);
+            directionalLight.position.set(0, -70, 100).normalize();
+            this.scene.add(directionalLight);
+
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff);
+            directionalLight2.position.set(0, 70, 100).normalize();
+            this.scene.add(directionalLight2);
+
+            // use the three.js GLTF loader to add the 3D model to the three.js scene
+            const loader = new GLTFLoader();
+            loader.load(
+                'https://lmac-stg.github.io/STG/rrr/Test5.glb',
+                (gltf) => {
+                    this.scene.add(gltf.scene);
+                }
+            );
+            this.map = map;
+
+            // use the MapLibre GL JS map canvas for three.js
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: map.getCanvas(),
+                context: gl,
+                antialias: true
+            });
+
+            this.renderer.autoClear = false;
+        },
+        render (gl, args) {
+            const modelTransform = getModelTransform();
+            
+            const rotationX = new THREE.Matrix4().makeRotationAxis(
+                new THREE.Vector3(1, 0, 0),
+                modelTransform.rotateX
+            );
+            const rotationY = new THREE.Matrix4().makeRotationAxis(
+                new THREE.Vector3(0, 1, 0),
+                modelTransform.rotateY
+            );
+            const rotationZ = new THREE.Matrix4().makeRotationAxis(
+                new THREE.Vector3(0, 0, 1),
+                modelTransform.rotateZ
+            );
+
+            const m = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix);
+            const l = new THREE.Matrix4()
+                .makeTranslation(
+                    modelTransform.translateX,
+                    modelTransform.translateY,
+                    modelTransform.translateZ
+                )
+                .scale(
+                    new THREE.Vector3(
+                        modelTransform.scale,
+                        -modelTransform.scale,
+                        modelTransform.scale
+                    )
+                )
+                .multiply(rotationX)
+                .multiply(rotationY)
+                .multiply(rotationZ);
+
+            // Alternatively, you can use this API to get the correct model matrix.
+            // It will work regardless of current projection.
+            // Also see the example "globe-3d-model.html".
+            //
+            // const modelMatrix = args.getMatrixForModel(modelOrigin, modelAltitude);
+            // const m = new THREE.Matrix4().fromArray(matrix);
+            // const l = new THREE.Matrix4().fromArray(modelMatrix);
+
+            this.camera.projectionMatrix = m.multiply(l);
+            this.renderer.resetState();
+            this.renderer.render(this.scene, this.camera);
+            this.map.triggerRepaint();
+        }
+    };
+
+    map.on('style.load', () => {
+        // Add 3D buildings layer first
+        const layers = map.getStyle().layers;
+
+        let labelLayerId;
+        for (let i = 0; i < layers.length; i++) {
+            if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
+                labelLayerId = layers[i].id;
+                break;
+            }
+        }
+
+        map.addSource('openmaptiles', {
+            url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
+            type: 'vector',
+        });
+
+        map.addLayer(
+            {
+                'id': '3d-buildings',
+                'source': 'openmaptiles',
+                'source-layer': 'building',
+                'type': 'fill-extrusion',
+                'minzoom': 15,
+                'filter': ['!=', ['get', 'hide_3d'], true],
+                'paint': {
+                    'fill-extrusion-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'render_height'], 0, 'lightgray', 200, 'royalblue', 400, 'lightblue'
+                    ],
+                    'fill-extrusion-height': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        15,
+                        0,
+                        16,
+                        ['get', 'render_height']
+                    ],
+                    'fill-extrusion-base': ['case',
+                        ['>=', ['get', 'zoom'], 16],
+                        ['get', 'render_min_height'], 0
+                    ]
+                }
+            },
+            labelLayerId
+        );
+
+        // Then add the custom 3D model layer
+        map.addLayer(customLayer);
+    });
+
+    // Interactive controls
+    function setupControls() {
+        const controls = {
+            posX: document.getElementById('posX'),
+            posY: document.getElementById('posY'),
+            posZ: document.getElementById('posZ'),
+            rotX: document.getElementById('rotX'),
+            rotY: document.getElementById('rotY'),
+            rotZ: document.getElementById('rotZ'),
+            scale: document.getElementById('scale')
+        };
+
+        const valueDisplays = {
+            posX: document.getElementById('posXValue'),
+            posY: document.getElementById('posYValue'),
+            posZ: document.getElementById('posZValue'),
+            rotX: document.getElementById('rotXValue'),
+            rotY: document.getElementById('rotYValue'),
+            rotZ: document.getElementById('rotZValue'),
+            scale: document.getElementById('scaleValue')
+        };
+
+        // Update transform values when controls change
+        Object.keys(controls).forEach(key => {
+            controls[key].addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                dynamicTransform[key] = value;
+                valueDisplays[key].textContent = value.toFixed(key === 'scale' ? 0 : 5);
+                map.triggerRepaint();
+            });
+        });
+    }
+
+    // Function to copy current values to console for permanent use
+    window.copyValues = function() {
+        console.log('Current model transform values:');
+        console.log(`Position offset: X=${dynamicTransform.posX}, Y=${dynamicTransform.posY}, Z=${dynamicTransform.posZ}`);
+        console.log(`Rotation: X=${dynamicTransform.rotX}, Y=${dynamicTransform.rotY}, Z=${dynamicTransform.rotZ}`);
+        console.log(`Scale factor: ${dynamicTransform.scale}`);
+        console.log('\nTo use these values permanently, update your code with:');
+        console.log(`const modelTransform = {
+    translateX: modelAsMercatorCoordinate.x + ${dynamicTransform.posX},
+    translateY: modelAsMercatorCoordinate.y + ${dynamicTransform.posY},
+    translateZ: modelAsMercatorCoordinate.z + ${dynamicTransform.posZ},
+    rotateX: ${dynamicTransform.rotX},
+    rotateY: ${dynamicTransform.rotY},
+    rotateZ: ${dynamicTransform.rotZ},
+    scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits() * ${dynamicTransform.scale}
+};`);
+    };
+
+    // Setup controls when page loads
+    map.on('load', setupControls);
+</script>
 </body>
 </html>

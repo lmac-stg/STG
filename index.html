@@ -1,224 +1,1467 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Display buildings in 3D</title>
-  <meta property="og:description" content="Use extrusions to display buildings' height in 3D." />
-  <meta charset='utf-8'>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css' />
-  <script src='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js'></script>
-  <style>
-      body { margin: 0; padding: 0; }
-      html, body, #map { height: 100%; }
+    <title>STG Projects - 3D Building View</title>
+    <meta property="og:description" content="View STG projects with 3D buildings display." />
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css' />
+    <script src='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js'></script>
+    <script type="importmap">
+        {
+            "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; padding: 0; }
+        html, body, #map { height: 100%; }
+        
+        /* White vignette effect */
+        .vignette {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 500;
+            background: radial-gradient(ellipse at center, transparent 30%, rgba(255, 255, 255, 0.3) 70%, rgba(255, 255, 255, 0.8) 100%);
+        }
+        
+        /* Title container with blur effect */
+        .map-title {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5x);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            pointer-events: none;
+            font-family: Arial, sans-serif;
+            width: auto;
+            min-width: 300px;
+            max-width: 400px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .title-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 60px; /* Match the logo height */
+        }
+        
+        .title-text {
+            font-size: 28px;
+            font-weight: bold;
+            color: black;
+            line-height: 1.1;
+            margin: 0;
+        }
+        
+        .subtitle {
+            font-size: 12px;
+            color: #666;
+            font-weight: normal;
+            line-height: 1.2;
+            margin: 0;
+        }
+        
+        .stg-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+        
+        /* Custom popup positioning */
+        .custom-popup {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1001;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 400px;
+            width: 380px;
+            max-height: 70vh;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+        
+        .custom-popup-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            color: white;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 1002;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .custom-popup-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
 
-    #controls {
-        position: absolute;
-        top: 20px;
-        left: 50%;
-        transform: translate(-50%);
-        z-index: 1;
-        display: flex;
-        gap: 10px;
-    }
-    .fly-btn {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 3px;
-        font-size: 14px;
-        color: #fff;
-        background: #ee8a65;
-        cursor: pointer;
-    }
-  </style>
+        /* Feature list panel */
+        .feature-list {
+            position: absolute;
+            top: 140px;
+            left: 20px;
+            width: auto;
+            min-width: 300px;
+            max-width: 400px;
+            max-height: 80vh;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            border: none;
+        }
+        
+        .feature-list-header {
+            padding: 15px;
+            background: #ff0000;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            user-select: none;
+            margin: 0;
+            border-radius: 8px 8px 0 0;
+        }
+        
+        .minimize-icon {
+            font-size: 12px;
+            transition: transform 0.3s ease;
+        }
+        
+        .feature-list.minimized .minimize-icon {
+            transform: rotate(180deg);
+        }
+        
+        .feature-list-content {
+            max-height: calc(80vh - 50px);
+            overflow-y: auto;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+        }
+        
+        .feature-list.minimized .feature-list-content {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+        }
+        
+        .feature-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            font-family: Arial, sans-serif;
+            gap: 10px;
+        }
+        
+        .feature-item:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .feature-item:last-child {
+            border-bottom: none;
+        }
+        
+        .feature-thumbnail {
+            width: 50px;
+            height: 50px;
+            border-radius: 4px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        
+        .placeholder-thumbnail {
+            background-color: #cccccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .placeholder-thumbnail::after {
+            content: "📷";
+            font-size: 20px;
+            opacity: 0.5;
+        }
+        
+        .feature-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .feature-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 4px;
+            font-family: Arial, sans-serif;
+        }
+        
+        .feature-details {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.3;
+            font-family: Arial, sans-serif;
+        }
+        
+        .feature-city {
+            font-size: 11px;
+            color: #ff0000;
+            font-weight: bold;
+            margin-top: 4px;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Navigation buttons */
+        .nav-buttons {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+        
+        .nav-dropdown {
+            position: relative;
+        }
+        
+        .fly-button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        .dropdown-menu {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 5px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            margin-bottom: 5px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .dropdown-menu.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        
+        .dropdown-item {
+            padding: 10px 15px;
+            color: #333;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 14px;
+            font-weight: bold;
+            font-family: Arial, sans-serif;
+        }
+        
+        .dropdown-item:hover {
+            background-color: rgba(255, 0, 0, 0.1);
+        }
+        
+        .dropdown-item:first-child {
+            border-radius: 5px 5px 0 0;
+        }
+        
+        .dropdown-item:last-child {
+            border-radius: 0 0 5px 5px;
+        }
+        
+        .austin-btn {
+            background: #ff0000;
+        }
+        
+        .austin-btn:hover {
+            background: #ff7777;
+            transform: translateY(-2px);
+        }
+        
+        .nashville-btn {
+            background: #ff0000;
+        }
+        
+        .nashville-btn:hover {
+            background: #ff6969;
+            transform: translateY(-2px);
+        }
+
+        /* Attribution control styling - make it collapsed by default */
+        .maplibregl-ctrl-attrib.maplibregl-compact {
+            min-height: 20px;
+        }
+        
+        .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) .maplibregl-ctrl-attrib-inner {
+            display: none;
+        }
+        
+        .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show):hover .maplibregl-ctrl-attrib-inner {
+            display: block;
+        }
+
+        /* Zoom level display for debugging */
+        .zoom-display {
+            position: absolute;
+            top: 110px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1000;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="controls">
-    <button id="fly-nashville" class="fly-btn">Nashville</button>
-    <button id="fly-austin" class="fly-btn">Austin</button>
+<div class="vignette"></div>
+<div class="zoom-display" id="zoom-display">Zoom: 15.5</div>
+<div class="map-title">
+    <img src="https://lmac-stg.github.io/STG/images/Logo2.png" alt="STG Logo" class="stg-logo">
+    <div class="title-content">
+        <div class="title-text">Project Explorer</div>
+        <div class="subtitle">2025</div>
+    </div>
 </div>
+<div class="feature-list">
+    <div class="feature-list-header" id="feature-list-header">
+        <span>STG Projects</span>
+        <span class="minimize-icon">▼</span>
+    </div>
+    <div class="feature-list-content" id="feature-list"></div>
+</div>
+<div class="nav-buttons">
+    <div class="nav-dropdown">
+        <button id="austin-btn" class="fly-button austin-btn">Austin ▼</button>
+        <div id="austin-menu" class="dropdown-menu">
+            <div class="dropdown-item" data-action="austin-downtown">Downtown</div>
+            <div class="dropdown-item" data-action="austin-greater">Greater Region</div>
+        </div>
+    </div>
+    <div class="nav-dropdown">
+        <button id="nashville-btn" class="fly-button nashville-btn">Nashville ▼</button>
+        <div id="nashville-menu" class="dropdown-menu">
+            <div class="dropdown-item" data-action="nashville-downtown">Downtown</div>
+            <div class="dropdown-item" data-action="nashville-greater">Greater Region</div>
+        </div>
+    </div>
+</div>
+<div id="map"></div>
+<script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-<script>
-  const MAPTILER_KEY = 'gkgjAgVis1iYA7Dh8b1D';
-  const austinCenter = [-97.7431, 30.2672];
-  const nashvilleCenter = [-86.7816, 36.1627];
-
-  const map = new maplibregl.Map({
-      style: `https://api.maptiler.com/maps/019856a5-2440-7965-8008-74c6248d4eb1/style.json?key=gkgjAgVis1iYA7Dh8b1D`,
-      center: austinCenter,
-      zoom: 15,
-      pitch: 70,
-      bearing: 60,
-      container: 'map',
-      canvasContextAttributes: {antialias: true}
-  });
-
-let animationFrameId;
-let restartTimeout;
-
-function rotateCamera(timestamp) {
-    map.rotateTo((timestamp / 100) % 360, {duration: 0});
-    animationFrameId = requestAnimationFrame(rotateCamera);
-}
-
-function stopRotation() {
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-    }
-    if (restartTimeout) {
-        clearTimeout(restartTimeout);
-    }
-
-    // Remove listeners to avoid stacking
-    map.getCanvas().removeEventListener('mousedown', stopRotation);
-    map.getCanvas().removeEventListener('touchstart', stopRotation);
-    map.getCanvas().removeEventListener('wheel', stopRotation);
-
-    // Resume rotation and re-add listeners after 10 seconds
-    restartTimeout = setTimeout(() => {
-        rotateCamera(performance.now());
-        map.getCanvas().addEventListener('mousedown', stopRotation);
-        map.getCanvas().addEventListener('touchstart', stopRotation);
-        map.getCanvas().addEventListener('wheel', stopRotation);
-    }, 10000);
-}
-
-  // The 'building' layer in the streets vector source contains building-height
-  // data from OpenStreetMap.
-  map.on('load', () => {
-
-    // Start the animation.
-    rotateCamera(0);
-
-    map.getCanvas().addEventListener('mousedown', stopRotation);
-    map.getCanvas().addEventListener('touchstart', stopRotation);
-    map.getCanvas().addEventListener('wheel', stopRotation);
-
-    // Insert the layer beneath any symbol layer.
-    const layers = map.getStyle().layers;
-
-    let labelLayerId;
-    for (let i = 0; i < layers.length; i++) {
-        if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
-            labelLayerId = layers[i].id;
-            break;
-        }
-    }
-
-    map.addSource('openmaptiles', {
-        url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
-        type: 'vector',
+    const MAPTILER_KEY = 'get_your_own_OpIi9ZULNHzrESv6T2vL';
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: `https://api.maptiler.com/maps/019856a5-2440-7965-8008-74c6248d4eb1/style.json?key=gkgjAgVis1iYA7Dh8b1D`,
+        center: [-97.7522, 30.2672], // Centered on Austin
+        zoom: 15.5,
+        pitch: 60,
+        bearing: -17.6,
+        canvasContextAttributes: {antialias: true}
     });
 
-    map.addLayer(
-        {
-            'id': '3d-buildings',
-            'source': 'openmaptiles',
-            'source-layer': 'building',
-            'type': 'fill-extrusion',
-            'minzoom': 14,
-            'filter': ['!=', ['get', 'hide_3d'], true],
-            'paint': {
-                'fill-extrusion-color': [
-                    'interpolate',
-                    ['linear'],
-                    ['get', 'render_height'], 0, 'lightgray', 200, 'lightgray', 400, 'lightgray'
-                ],
-                'fill-extrusion-height': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    13,
-                    0,
-                    14,
-                    ['get', 'render_height']
-                ],
-                'fill-extrusion-base': ['case',
-                    ['>=', ['get', 'zoom'], 13],
-                    ['get', 'render_min_height'], 0
-                ],
-                'fill-extrusion-opacity': 0.85 // 15% transparent
-            }
-        },
-        labelLayerId
+    // 3D Model Configuration
+    const modelOrigin = [-97.7522, 30.2672]; // Austin coordinates - adjust as needed
+    const modelAltitude = 0;
+    const modelRotate = [Math.PI / 2, 0, 0];
+
+    const modelAsMercatorCoordinate = maplibregl.MercatorCoordinate.fromLngLat(
+        modelOrigin,
+        modelAltitude
     );
 
-    // Add popup on click for buildings
-    map.on('click', '3d-buildings', (e) => {
-        const feature = e.features[0];
-        const coordinates = e.lngLat;
-        const height = feature.properties.render_height || 'N/A';
-        const minHeight = feature.properties.render_min_height || 'N/A';
+    // Static model transform with final positioning values
+    const modelTransform = {
+        translateX: modelAsMercatorCoordinate.x + -0.0000041,
+        translateY: modelAsMercatorCoordinate.y + -0.0000033,
+        translateZ: modelAsMercatorCoordinate.z + 0.0000038,
+        rotateX: 1.57,
+        rotateY: 5.96,
+        rotateZ: 0,
+        scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits() * 2000
+    };
 
-        new maplibregl.Popup()
-            .setLngLat(coordinates)
-            .setHTML(
-                `<strong>Building Info</strong><br>
-                Height: ${height} meters<br>
-                Min Height: ${minHeight} meters`
-            )
-            .addTo(map);
-    });
+    // configuration of the custom layer for a 3D model per the CustomLayerInterface
+    const customLayer = {
+        id: '3d-model',
+        type: 'custom',
+        renderingMode: '3d',
+        onAdd (map, gl) {
+            this.camera = new THREE.Camera();
+            this.scene = new THREE.Scene();
 
-    document.getElementById('fly-nashville').addEventListener('click', () => {
-        stopRotation(); // Stop rotation and start/restart timer
-        map.flyTo({
-            center: nashvilleCenter,
-            zoom: 15,
-            pitch: 70,
-            bearing: 60,
-            essential: true
+            // Add ambient light for overall illumination
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+            this.scene.add(ambientLight);
+
+            // Add directional light similar to map lighting
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 0.5).normalize();
+            directionalLight.castShadow = false;
+            this.scene.add(directionalLight);
+
+            // Add fill light from opposite direction
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            fillLight.position.set(-0.5, 0.5, -0.5).normalize();
+            this.scene.add(fillLight);
+
+            // use the three.js GLTF loader to add the 3D model to the three.js scene
+            const loader = new GLTFLoader();
+            loader.load(
+                'https://lmac-stg.github.io/STG/rrr/Test5.glb', // Replace with your model URL
+                (gltf) => {
+                    // Adjust materials to match building layer appearance
+                    gltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            // Preserve the original material but adjust its properties
+                            if (child.material) {
+                                // Clone the original material to avoid affecting other instances
+                                child.material = child.material.clone();
+                                
+                                // Adjust material properties to match building appearance
+                                child.material.color.setHex(0xd3d3d3); // Light gray like buildings
+                                child.material.transparent = true;
+                                child.material.opacity = 0.85; // Match building opacity
+                                
+                                // Ensure proper lighting response
+                                if (child.material.type === 'MeshStandardMaterial') {
+                                    child.material.roughness = 0.8;
+                                    child.material.metalness = 0.1;
+                                }
+                            }
+                        }
+                    });
+                    this.scene.add(gltf.scene);
+                }
+            );
+            this.map = map;
+
+            // use the MapLibre GL JS map canvas for three.js
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: map.getCanvas(),
+                context: gl,
+                antialias: true
+            });
+
+            this.renderer.autoClear = false;
+        },
+        render (gl, args) {
+            const rotationX = new THREE.Matrix4().makeRotationAxis(
+                new THREE.Vector3(1, 0, 0),
+                modelTransform.rotateX
+            );
+            const rotationY = new THREE.Matrix4().makeRotationAxis(
+                new THREE.Vector3(0, 1, 0),
+                modelTransform.rotateY
+            );
+            const rotationZ = new THREE.Matrix4().makeRotationAxis(
+                new THREE.Vector3(0, 0, 1),
+                modelTransform.rotateZ
+            );
+
+            const m = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix);
+            const l = new THREE.Matrix4()
+                .makeTranslation(
+                    modelTransform.translateX,
+                    modelTransform.translateY,
+                    modelTransform.translateZ
+                )
+                .scale(
+                    new THREE.Vector3(
+                        modelTransform.scale,
+                        -modelTransform.scale,
+                        modelTransform.scale
+                    )
+                )
+                .multiply(rotationX)
+                .multiply(rotationY)
+                .multiply(rotationZ);
+
+            this.camera.projectionMatrix = m.multiply(l);
+            this.renderer.resetState();
+            this.renderer.render(this.scene, this.camera);
+            this.map.triggerRepaint();
+        }
+    };
+
+    // Your GeoJSON data
+    const geojsonData = {"type":"FeatureCollection","features":[{"type":"Feature","id":1,"geometry":{"type":"Point","coordinates":[-97.762317562999954,30.253296205000026]},"properties":{"OBJECTID":1,"STG":1,"Floors":4,"YearCompleted":2024,"Name":"1301 S Lamar","Address":"1301 S Lamar Blvd Austin, TX 78704","Image_URL":"https://lmac-stg.github.io/STG/images/1301_1.jpg","gif_URL":null,"Height":null,"Image_Name":"1301_1.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":1}},{"type":"Feature","id":2,"geometry":{"type":"Point","coordinates":[-97.752242940999963,30.271500508000031]},"properties":{"OBJECTID":2,"STG":2,"Floors":null,"YearCompleted":null,"Name":"STG Austin Office","Address":"828 W 6th St #300, Austin, Texas 78703","Image_URL":"https://lmac-stg.github.io/STG/images/STG_Office.png","gif_URL":null,"Height":null,"Image_Name":"STG_Office.png","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":2}},{"type":"Feature","id":3,"geometry":{"type":"Point","coordinates":[-97.751790588999938,30.265980935000073]},"properties":{"OBJECTID":3,"STG":1,"Floors":35,"YearCompleted":2021,"Name":"Block 185","Address":"601 W 2nd St, Austin, TX 78701","Image_URL":"https://lmac-stg.github.io/STG/images/Block_185.jpg","gif_URL":"https://lmac-stg.github.io/STG/images/Block 185.gif","Height":594,"Image_Name":"Block_185.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":3}},{"type":"Feature","id":4,"geometry":{"type":"Point","coordinates":[-97.752631706999978,30.266559594000057]},"properties":{"OBJECTID":4,"STG":1,"Floors":null,"YearCompleted":2019,"Name":"Seaholm","Address":"211 Power Plant Dr, Austin, TX 78703","Image_URL":"https://lmac-stg.github.io/STG/images/Seaholm.jpg","gif_URL":null,"Height":null,"Image_Name":"Seaholm.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":4}},{"type":"Feature","id":5,"geometry":{"type":"Point","coordinates":[-97.745474428999955,30.266030245000024]},"properties":{"OBJECTID":5,"STG":1,"Floors":null,"YearCompleted":2023,"Name":"Truluck's","Address":"300 Colorado St, Austin, TX 78701","Image_URL":"https://lmac-stg.github.io/STG/images/Trulucks_1.jpg","gif_URL":null,"Height":null,"Image_Name":"Trulucks_1.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":5}},{"type":"Feature","id":6,"geometry":{"type":"Point","coordinates":[-97.720921695999948,30.242412735000073]},"properties":{"OBJECTID":6,"STG":1,"Floors":null,"YearCompleted":2020,"Name":"Oracle","Address":"2300 Oracle Wy, Austin, TX 78741","Image_URL":"https://lmac-stg.github.io/STG/images/Oracle_1.jpg","gif_URL":null,"Height":null,"Image_Name":"Oracle_1.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":6}},{"type":"Feature","id":7,"geometry":{"type":"Point","coordinates":[-97.744738148999943,30.268916300000058]},"properties":{"OBJECTID":7,"STG":1,"Floors":null,"YearCompleted":2020,"Name":"Indeed","Address":null,"Image_URL":"https://lmac-stg.github.io/STG/images/Indeed.jpg","gif_URL":null,"Height":null,"Image_Name":"Indeed.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":7}},{"type":"Feature","id":8,"geometry":{"type":"Point","coordinates":[-97.744087032999971,30.296216104000052]},"properties":{"OBJECTID":8,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Texas French Bread","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":8}},{"type":"Feature","id":9,"geometry":{"type":"Point","coordinates":[-97.704908284999988,30.297566452000069]},"properties":{"OBJECTID":9,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Thinkery","Address":"1830 Simond Ave, Austin, TX 78723","Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":9}},{"type":"Feature","id":10,"geometry":{"type":"Point","coordinates":[-97.737663909999981,30.25964343000004]},"properties":{"OBJECTID":10,"STG":1,"Floors":41,"YearCompleted":2023,"Name":"Vesper","Address":null,"Image_URL":null,"gif_URL":null,"Height":455,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":10}},{"type":"Feature","id":11,"geometry":{"type":"Point","coordinates":[-97.742884248999985,30.262453206000032]},"properties":{"OBJECTID":11,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Global Foundries","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":11}},{"type":"Feature","id":12,"geometry":{"type":"Point","coordinates":[-97.736401972999943,30.279595681000046]},"properties":{"OBJECTID":12,"STG":1,"Floors":null,"YearCompleted":null,"Name":"ERS","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":12}},{"type":"Feature","id":13,"geometry":{"type":"Point","coordinates":[-97.738874923999958,30.256402817000037]},"properties":{"OBJECTID":13,"STG":1,"Floors":33,"YearCompleted":2021,"Name":"Natiivo","Address":null,"Image_URL":null,"gif_URL":null,"Height":358,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":13}},{"type":"Feature","id":14,"geometry":{"type":"Point","coordinates":[-97.732416623999939,30.254046311000025]},"properties":{"OBJECTID":14,"STG":1,"Floors":null,"YearCompleted":null,"Name":"KMFA","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":14}},{"type":"Feature","id":15,"geometry":{"type":"Point","coordinates":[-97.776510601999973,30.246647529000029]},"properties":{"OBJECTID":15,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Zephyr","Address":null,"Image_URL":"https://lmac-stg.github.io/STG/images/Zephyr_1.jpg","gif_URL":null,"Height":null,"Image_Name":"Zephyr_1.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":16}},{"type":"Feature","id":16,"geometry":{"type":"Point","coordinates":[-86.778160986999978,36.165514599000062]},"properties":{"OBJECTID":16,"STG":2,"Floors":null,"YearCompleted":null,"Name":"STG Nashville Office","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":17}},{"type":"Feature","id":17,"geometry":{"type":"Point","coordinates":[-86.778610080999954,36.164849165000078]},"properties":{"OBJECTID":17,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Printers and Bank","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":18}},{"type":"Feature","id":18,"geometry":{"type":"Point","coordinates":[-86.780508802999975,36.167680139000026]},"properties":{"OBJECTID":18,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Parkway Towers","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":19}},{"type":"Feature","id":19,"geometry":{"type":"Point","coordinates":[-86.80538822799997,36.205971728000065]},"properties":{"OBJECTID":19,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Northview","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":20}},{"type":"Feature","id":20,"geometry":{"type":"Point","coordinates":[-97.787598521999939,30.48001239000007]},"properties":{"OBJECTID":20,"STG":1,"Floors":null,"YearCompleted":2024,"Name":"Lakeline","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":21}},{"type":"Feature","id":21,"geometry":{"type":"Point","coordinates":[-97.752447920999941,30.26765802500006]},"properties":{"OBJECTID":21,"STG":1,"Floors":null,"YearCompleted":2023,"Name":"Thrive","Address":"211 Walter Seaholm Dr #200, Austin, TX 78701","Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":22}},{"type":"Feature","id":22,"geometry":{"type":"Point","coordinates":[-97.74277423999996,30.277105085000073]},"properties":{"OBJECTID":22,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Butler Snow","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":23}},{"type":"Feature","id":23,"geometry":{"type":"Point","coordinates":[-97.707292886999937,30.256558311000049]},"properties":{"OBJECTID":23,"STG":1,"Floors":null,"YearCompleted":null,"Name":"BetterUp","Address":"3100 E 5th St. Suite 350, Austin, TX 78702","Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":24}},{"type":"Feature","id":24,"geometry":{"type":"Point","coordinates":[-97.653090481999982,30.40700638800007]},"properties":{"OBJECTID":24,"STG":1,"Floors":null,"YearCompleted":null,"Name":"The Pitch","Address":"13000 Harris Ridge Blvd, Austin, TX 78753","Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":25}},{"type":"Feature","id":25,"geometry":{"type":"Point","coordinates":[-97.722141984999951,30.398626551000064]},"properties":{"OBJECTID":25,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Griffis at The Domain","Address":null,"Image_URL":"https://lmac-stg.github.io/STG/images/Griffis_01.jpg","gif_URL":null,"Height":null,"Image_Name":"Griffis_01.jpg","gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":26}},{"type":"Feature","id":26,"geometry":{"type":"Point","coordinates":[-97.715075930999944,30.40513698500007]},"properties":{"OBJECTID":26,"STG":1,"Floors":null,"YearCompleted":null,"Name":"The Watson","Address":null,"Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":27}},{"type":"Feature","id":27,"geometry":{"type":"Point","coordinates":[-97.663234665999937,30.309324787000037]},"properties":{"OBJECTID":27,"STG":1,"Floors":null,"YearCompleted":null,"Name":"Boys & Girls Clubs of Austin","Address":"6648 Ed Bluestein Blvd, Austin, TX 78723","Image_URL":null,"gif_URL":null,"Height":null,"Image_Name":null,"gif_Name":null,"Image2_URL":null,"Image2_Name":null,"ORIG_FID":28}}]};
+
+    // Pulsing dot animation for selected points
+    const size = 200;
+    let currentlyAnimatingFeature = null;
+
+    // Red pulsing dot for regular projects
+    const redPulsingDot = {
+        width: size,
+        height: size,
+        data: new Uint8Array(size * size * 4),
+
+        onAdd() {
+            const canvas = document.createElement('canvas');
+            canvas.width = this.width;
+            canvas.height = this.height;
+            this.context = canvas.getContext('2d');
+        },
+
+        render() {
+            const duration = 1000;
+            const t = (performance.now() % duration) / duration;
+
+            const radius = (size / 2) * 0.3;
+            const outerRadius = (size / 2) * 0.7 * t + radius;
+            const context = this.context;
+
+            // draw outer circle
+            context.clearRect(0, 0, this.width, this.height);
+            context.beginPath();
+            context.arc(
+                this.width / 2,
+                this.height / 2,
+                outerRadius,
+                0,
+                Math.PI * 2
+            );
+            context.fillStyle = `rgba(255, 0, 0, ${1 - t})`;
+            context.fill();
+
+            // draw inner circle
+            context.beginPath();
+            context.arc(
+                this.width / 2,
+                this.height / 2,
+                radius,
+                0,
+                Math.PI * 2
+            );
+            context.fillStyle = 'rgba(255, 0, 0, 1)';
+            context.strokeStyle = 'white';
+            context.lineWidth = 2 + 4 * (1 - t);
+            context.fill();
+            context.stroke();
+
+            // update this image's data with data from the canvas
+            this.data = context.getImageData(
+                0,
+                0,
+                this.width,
+                this.height
+            ).data;
+
+            // continuously repaint the map
+            map.triggerRepaint();
+
+            return true;
+        }
+    };
+
+    // Blue pulsing dot for STG offices
+    const bluePulsingDot = {
+        width: size,
+        height: size,
+        data: new Uint8Array(size * size * 4),
+
+        onAdd() {
+            const canvas = document.createElement('canvas');
+            canvas.width = this.width;
+            canvas.height = this.height;
+            this.context = canvas.getContext('2d');
+        },
+
+        render() {
+            const duration = 1000;
+            const t = (performance.now() % duration) / duration;
+
+            const radius = (size / 2) * 0.3;
+            const outerRadius = (size / 2) * 0.7 * t + radius;
+            const context = this.context;
+
+            // draw outer circle
+            context.clearRect(0, 0, this.width, this.height);
+            context.beginPath();
+            context.arc(
+                this.width / 2,
+                this.height / 2,
+                outerRadius,
+                0,
+                Math.PI * 2
+            );
+            context.fillStyle = `rgba(0, 102, 255, ${1 - t})`;
+            context.fill();
+
+            // draw inner circle
+            context.beginPath();
+            context.arc(
+                this.width / 2,
+                this.height / 2,
+                radius,
+                0,
+                Math.PI * 2
+            );
+            context.fillStyle = 'rgba(0, 102, 255, 1)';
+            context.strokeStyle = 'white';
+            context.lineWidth = 2 + 4 * (1 - t);
+            context.fill();
+            context.stroke();
+
+            // update this image's data with data from the canvas
+            this.data = context.getImageData(
+                0,
+                0,
+                this.width,
+                this.height
+            ).data;
+
+            // continuously repaint the map
+            map.triggerRepaint();
+
+            return true;
+        }
+    };
+
+    // Custom popup management
+    let currentCustomPopup = null;
+
+    // Function to show animated point for selected feature
+    function showAnimatedPoint(coordinates, isOffice = false) {
+        // Hide any existing animated point
+        hideAnimatedPoint();
+        
+        // Create the animated point data
+        const animatedPointData = {
+            'type': 'FeatureCollection',
+            'features': [{
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Point',
+                    'coordinates': coordinates
+                }
+            }]
+        };
+        
+        // Add source for animated point
+        map.addSource('animated-point', {
+            'type': 'geojson',
+            'data': animatedPointData
         });
-    });
-
-    document.getElementById('fly-austin').addEventListener('click', () => {
-        stopRotation(); // Stop rotation and start/restart timer
-        map.flyTo({
-            center: austinCenter,
-            zoom: 15,
-            pitch: 70,
-            bearing: 60,
-            essential: true
+        
+        // Add layer with appropriate pulsing dot
+        const iconImage = isOffice ? 'blue-pulsing-dot' : 'red-pulsing-dot';
+        map.addLayer({
+            'id': 'animated-point',
+            'type': 'symbol',
+            'source': 'animated-point',
+            'layout': {
+                'icon-image': iconImage,
+                'icon-allow-overlap': true,
+                'icon-ignore-placement': true
+            }
         });
-    });
+        
+        currentlyAnimatingFeature = coordinates;
+    }
+    
+    // Function to hide animated point
+    function hideAnimatedPoint() {
+        if (map.getLayer('animated-point')) {
+            map.removeLayer('animated-point');
+        }
+        if (map.getSource('animated-point')) {
+            map.removeSource('animated-point');
+        }
+        currentlyAnimatingFeature = null;
+    }
 
-    map.loadImage('https://maplibre.org/maplibre-gl-js-docs/assets/marker-15.png', (error, image) => {
-        if (error) throw error;
-        if (!map.hasImage('marker-15')) {
-            map.addImage('marker-15', image);
+    function createCustomPopup(props, isOffice = false) {
+        // Remove any existing custom popup
+        closeCustomPopup();
+        
+        const backgroundColor = isOffice ? '#0066FF' : '#ff0000';
+        
+        let popupHTML = `
+            <div class="custom-popup" id="custom-popup">
+                <button class="custom-popup-close" onclick="closeCustomPopup()">×</button>
+                <div style="padding: 15px; background: ${backgroundColor}; color: white; font-weight: bold; font-size: 16px; text-align: center; margin: 0; border-radius: 8px 8px 0 0;">${props.Name}</div>
+                <div style="padding: 15px; max-height: calc(70vh - 60px); overflow-y: auto;">
+        `;
+        if (props.Address) popupHTML += `<p><strong>Address:</strong> ${props.Address}</p>`;
+        if (props.Floors) popupHTML += `<p><strong>Floors:</strong> ${props.Floors}</p>`;
+        if (props.Height) popupHTML += `<p><strong>Height:</strong> ${props.Height} ft</p>`;
+        if (props.YearCompleted) popupHTML += `<p><strong>Year Completed:</strong> ${props.YearCompleted}</p>`;
+        if (props.Image_URL) popupHTML += `<img src="${props.Image_URL}" style="max-width: 100%; height: auto; margin-top: 10px;">`;
+        if (props.gif_URL) popupHTML += `<br><img src="${props.gif_URL}" style="max-width: 100%; height: auto; margin-top: 10px;">`;
+        popupHTML += `</div></div>`;
+        
+        document.body.insertAdjacentHTML('beforeend', popupHTML);
+        currentCustomPopup = document.getElementById('custom-popup');
+        
+        // Add click outside to close
+        setTimeout(() => {
+            document.addEventListener('click', handleOutsideClick);
+        }, 100);
+    }
+
+    function closeCustomPopup() {
+        if (currentCustomPopup) {
+            currentCustomPopup.remove();
+            currentCustomPopup = null;
+            document.removeEventListener('click', handleOutsideClick);
+        }
+        // Also close any MapLibre popups
+        const existingPopups = document.querySelectorAll('.maplibregl-popup');
+        existingPopups.forEach(popup => popup.remove());
+        
+        // Don't hide animated point when popup is closed - let it continue pulsing
+        // hideAnimatedPoint();
+    }
+
+    function handleOutsideClick(event) {
+        if (currentCustomPopup && !currentCustomPopup.contains(event.target)) {
+            closeCustomPopup();
+        }
+    }
+
+    // Function to populate the feature list
+    function populateFeatureList() {
+        const featureListContent = document.getElementById('feature-list');
+        
+        // Sort features by city (Austin first, then Nashville)
+        const sortedFeatures = geojsonData.features.sort((a, b) => {
+            const cityA = a.geometry.coordinates[0] > -90 ? 'Nashville' : 'Austin';
+            const cityB = b.geometry.coordinates[0] > -90 ? 'Nashville' : 'Austin';
+            
+            if (cityA !== cityB) {
+                return cityA === 'Austin' ? -1 : 1;
+            }
+            return a.properties.Name.localeCompare(b.properties.Name);
+        });
+        
+        sortedFeatures.forEach(feature => {
+            const props = feature.properties;
+            const coords = feature.geometry.coordinates;
+            const city = coords[0] > -90 ? 'Nashville' : 'Austin';
+            
+            const featureItem = document.createElement('div');
+            featureItem.className = 'feature-item';
+            featureItem.setAttribute('data-coords', JSON.stringify(coords));
+            
+            // Create thumbnail if image exists, otherwise use gray placeholder
+            let thumbnailHTML = '';
+            if (props.Image_URL) {
+                thumbnailHTML = `<img src="${props.Image_URL}" class="feature-thumbnail" alt="${props.Name}">`;
+            } else {
+                thumbnailHTML = `<div class="feature-thumbnail placeholder-thumbnail"></div>`;
+            }
+            
+            featureItem.innerHTML = `
+                ${thumbnailHTML}
+                <div class="feature-content">
+                    <div class="feature-name">${props.Name}</div>
+                    <div class="feature-city">${city}</div>
+                </div>
+            `;
+            
+            // Add click event to fly to location and show popup
+            featureItem.addEventListener('click', () => {
+                const coordinates = JSON.parse(featureItem.getAttribute('data-coords'));
+                const isOffice = props.STG === 2;
+                
+                // Close any existing popups
+                closeCustomPopup();
+                
+                // Resume rotation when a feature is selected
+                rotationDisabled = false;
+                
+                // Show animated point (will continue until next selection)
+                showAnimatedPoint(coordinates, isOffice);
+                
+                // Fly to the location
+                map.flyTo({
+                    center: coordinates,
+                    zoom: 18,
+                    pitch: 60,
+                    bearing: 0,
+                    essential: true,
+                    duration: 2000
+                });
+                
+                // Show custom popup after a short delay to allow the camera to start moving
+                setTimeout(() => {
+                    createCustomPopup(props, isOffice);
+                }, 500); // 500ms delay
+                
+                // Reset the inactivity timer when user clicks
+                resetInactivityTimer();
+            });
+            
+            featureListContent.appendChild(featureItem);
+        });
+    }
+
+    // Load the data when the map is ready
+    map.on('load', function() {
+        // Add the animated pulsing dot images
+        map.addImage('red-pulsing-dot', redPulsingDot, {pixelRatio: 2});
+        map.addImage('blue-pulsing-dot', bluePulsingDot, {pixelRatio: 2});
+        
+        // Populate the feature list first
+        populateFeatureList();
+        
+        // Add minimize/expand functionality
+        const featureListHeader = document.getElementById('feature-list-header');
+        const featureList = document.querySelector('.feature-list');
+        
+        featureListHeader.addEventListener('click', () => {
+            featureList.classList.toggle('minimized');
+        });
+        
+        // Insert the 3D buildings layer beneath any symbol layer
+        const layers = map.getStyle().layers;
+        let labelLayerId;
+        for (let i = 0; i < layers.length; i++) {
+            if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
+                labelLayerId = layers[i].id;
+                break;
+            }
         }
 
-        // Now fetch and add your GeoJSON layer
-        fetch('/your-backend-endpoint')
-            .then(response => response.json())
-            .then(data => {
-                map.addSource('my-points', {
-                    type: 'geojson',
-                    data: data
-                });
-                map.addLayer({
-                    "id": "my-points-layer",
-                    "type": "symbol",
-                    "source": "my-points",
-                    "layout": {
-                        "icon-image": "marker-15",
-                        "icon-size": 2.5,
-                        "icon-anchor": "bottom",
-                        "icon-offset": [0, -30],
-                        "text-field": ["get", "Name"],
-                        "text-font": ["Open Sans Bold"],
-                        "text-size": 16,
-                        "text-offset": [0, -2.5],
-                        "text-anchor": "bottom"
-                    }
-                });
+        // Add 3D buildings source and layer
+        map.addSource('openmaptiles', {
+            url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
+            type: 'vector',
+        });
+
+        map.addLayer(
+            {
+                'id': '3d-buildings',
+                'source': 'openmaptiles',
+                'source-layer': 'building',
+                'type': 'fill-extrusion',
+                'minzoom': 14, // Only show buildings when zoomed in at level 14 or closer
+                'filter': ['!=', ['get', 'hide_3d'], true],
+                'paint': {
+                    'fill-extrusion-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'render_height'], 0, 'lightgray', 200, 'lightgray', 400, 'lightgray'
+                    ],
+                    'fill-extrusion-height': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        12,
+                        0,
+                        14,
+                        ['get', 'render_height']
+                    ],
+                    'fill-extrusion-base': ['case',
+                        ['>=', ['get', 'zoom'], 14],
+                        ['get', 'render_min_height'], 0
+                    ],
+                    'fill-extrusion-opacity': 0.7
+                }
+            },
+            labelLayerId
+        );
+
+        // Add the custom 3D model layer
+        map.addLayer(customLayer);
+
+        // Add your GeoJSON as a source with clustering enabled
+        map.addSource('dots-source', {
+            'type': 'geojson',
+            'data': geojsonData,
+            cluster: true,
+            clusterMaxZoom: 14, // Max zoom to cluster points on
+            clusterRadius: 50 // Radius of each cluster when clustering points
+        });
+
+        // Add cluster layers for grouped points
+        // Red clusters for regular projects
+        map.addLayer({
+            'id': 'project-clusters',
+            'type': 'circle',
+            'source': 'dots-source',
+            'filter': ['all', ['has', 'point_count'], ['!=', ['get', 'STG'], 2]],
+            'paint': {
+                'circle-color': [
+                    'step',
+                    ['get', 'point_count'],
+                    '#ff4444', // Red for small clusters
+                    10,
+                    '#ff0000', // Darker red for medium clusters
+                    20,
+                    '#cc0000'  // Even darker red for large clusters
+                ],
+                'circle-radius': [
+                    'step',
+                    ['get', 'point_count'],
+                    15, // Small clusters
+                    10,
+                    20, // Medium clusters
+                    20,
+                    25  // Large clusters
+                ],
+                'circle-stroke-color': '#FFFFFF',
+                'circle-stroke-width': 2,
+                'circle-opacity': 0.9
+            }
+        });
+
+        // Blue clusters for STG offices
+        map.addLayer({
+            'id': 'office-clusters',
+            'type': 'circle',
+            'source': 'dots-source',
+            'filter': ['all', ['has', 'point_count'], ['==', ['get', 'STG'], 2]],
+            'paint': {
+                'circle-color': [
+                    'step',
+                    ['get', 'point_count'],
+                    '#4488ff', // Light blue for small clusters
+                    5,
+                    '#0066ff', // Medium blue for medium clusters
+                    10,
+                    '#0044cc'  // Dark blue for large clusters
+                ],
+                'circle-radius': [
+                    'step',
+                    ['get', 'point_count'],
+                    15, // Small clusters
+                    5,
+                    20, // Medium clusters
+                    10,
+                    25  // Large clusters
+                ],
+                'circle-stroke-color': '#FFFFFF',
+                'circle-stroke-width': 2,
+                'circle-opacity': 0.9
+            }
+        });
+
+        // Cluster count labels for project clusters
+        map.addLayer({
+            'id': 'project-cluster-count',
+            'type': 'symbol',
+            'source': 'dots-source',
+            'filter': ['all', ['has', 'point_count'], ['!=', ['get', 'STG'], 2]],
+            'layout': {
+                'text-field': '{point_count_abbreviated}',
+                'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                'text-size': 12,
+                'text-allow-overlap': true
+            },
+            'paint': {
+                'text-color': '#ffffff'
+            }
+        });
+
+        // Cluster count labels for office clusters
+        map.addLayer({
+            'id': 'office-cluster-count',
+            'type': 'symbol',
+            'source': 'dots-source',
+            'filter': ['all', ['has', 'point_count'], ['==', ['get', 'STG'], 2]],
+            'layout': {
+                'text-field': '{point_count_abbreviated}',
+                'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                'text-size': 12,
+                'text-allow-overlap': true
+            },
+            'paint': {
+                'text-color': '#ffffff'
+            }
+        });
+
+        // Add a layer to display regular project points (red circles with shadow)
+        map.addLayer({
+            'id': 'dots-points-shadow',
+            'type': 'circle',
+            'source': 'dots-source',
+            'filter': ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'STG'], 2]], // Show only non-clustered, non-office projects
+            'paint': {
+                'circle-radius': 7,
+                'circle-color': 'rgba(0, 0, 0, 0.3)',
+                'circle-translate': [2, 2],
+                'circle-opacity': 0.6
+            }
+        });
+
+        map.addLayer({
+            'id': 'dots-points',
+            'type': 'circle',
+            'source': 'dots-source',
+            'filter': ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'STG'], 2]], // Show only non-clustered, non-office projects
+            'paint': {
+                'circle-radius': 7,
+                'circle-color': '#FF0000',
+                'circle-stroke-color': '#FFFFFF',
+                'circle-stroke-width': 2,
+                'circle-opacity': 0.9
+            }
+        });
+
+        // Add shadow layer for STG offices
+        map.addLayer({
+            'id': 'stg-offices-shadow',
+            'type': 'circle',
+            'source': 'dots-source',
+            'filter': ['all', ['!', ['has', 'point_count']], ['==', ['get', 'STG'], 2]], // Show only non-clustered STG offices
+            'paint': {
+                'circle-radius': 8,
+                'circle-color': 'rgba(0, 0, 0, 0.3)',
+                'circle-translate': [2, 2],
+                'circle-opacity': 0.6
+            }
+        });
+
+        // Add STG offices as blue star-like circles
+        map.addLayer({
+            'id': 'stg-offices',
+            'type': 'circle',
+            'source': 'dots-source',
+            'filter': ['all', ['!', ['has', 'point_count']], ['==', ['get', 'STG'], 2]], // Show only non-clustered STG offices
+            'paint': {
+                'circle-radius': 8,
+                'circle-color': '#0066FF',
+                'circle-stroke-color': '#FFFFFF',
+                'circle-stroke-width': 3,
+                'circle-opacity': 0.9
+            }
+        });
+
+        // Add star symbols on top of blue circles for STG offices
+        map.addLayer({
+            'id': 'stg-offices-star',
+            'type': 'symbol',
+            'source': 'dots-source',
+            'filter': ['all', ['!', ['has', 'point_count']], ['==', ['get', 'STG'], 2]], // Show only non-clustered STG offices
+            'layout': {
+                'text-field': '★',
+                'text-font': ['Open Sans Regular'],
+                'text-size': 16,
+                'text-allow-overlap': true,
+                'text-ignore-placement': true
+            },
+            'paint': {
+                'text-color': '#FFFFFF',
+                'text-halo-color': 'rgba(0, 0, 0, 0.3)',
+                'text-halo-width': 1
+            }
+        });
+
+        // Add click event for project clusters to expand them
+        map.on('click', 'project-clusters', async (e) => {
+            const features = map.queryRenderedFeatures(e.point, {
+                layers: ['project-clusters']
             });
+            const clusterId = features[0].properties.cluster_id;
+            const zoom = await map.getSource('dots-source').getClusterExpansionZoom(clusterId);
+            map.easeTo({
+                center: features[0].geometry.coordinates,
+                zoom: Math.min(zoom, 18) // Limit max zoom
+            });
+        });
+
+        // Add click event for office clusters to expand them
+        map.on('click', 'office-clusters', async (e) => {
+            const features = map.queryRenderedFeatures(e.point, {
+                layers: ['office-clusters']
+            });
+            const clusterId = features[0].properties.cluster_id;
+            const zoom = await map.getSource('dots-source').getClusterExpansionZoom(clusterId);
+            map.easeTo({
+                center: features[0].geometry.coordinates,
+                zoom: Math.min(zoom, 18) // Limit max zoom
+            });
+        });
+
+        // Add click event to show property information for regular projects
+        map.on('click', 'dots-points', function(e) {
+            // Close any existing popups
+            closeCustomPopup();
+            
+            const properties = e.features[0].properties;
+            const coordinates = e.features[0].geometry.coordinates;
+            
+            // Resume rotation when a feature is selected
+            rotationDisabled = false;
+            
+            // Show animated point for map clicks too
+            showAnimatedPoint(coordinates, false);
+            
+            createCustomPopup(properties, false);
+        });
+
+        // Add click event to show property information for STG offices
+        map.on('click', 'stg-offices', function(e) {
+            // Close any existing popups
+            closeCustomPopup();
+            
+            const properties = e.features[0].properties;
+            const coordinates = e.features[0].geometry.coordinates;
+            
+            // Resume rotation when a feature is selected
+            rotationDisabled = false;
+            
+            // Show animated point for map clicks too
+            showAnimatedPoint(coordinates, true);
+            
+            createCustomPopup(properties, true);
+        });
+
+        // Add click event for star symbols on STG offices
+        map.on('click', 'stg-offices-star', function(e) {
+            // Close any existing popups
+            closeCustomPopup();
+            
+            const properties = e.features[0].properties;
+            const coordinates = e.features[0].geometry.coordinates;
+            
+            // Resume rotation when a feature is selected
+            rotationDisabled = false;
+            
+            // Show animated point for map clicks too
+            showAnimatedPoint(coordinates, true);
+            
+            createCustomPopup(properties, true);
+        });
+
+        // Change cursor on hover for clusters
+        map.on('mouseenter', 'project-clusters', function() {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'project-clusters', function() {
+            map.getCanvas().style.cursor = '';
+        });
+
+        map.on('mouseenter', 'office-clusters', function() {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'office-clusters', function() {
+            map.getCanvas().style.cursor = '';
+        });
+
+        // Change cursor on hover for regular projects
+        map.on('mouseenter', 'dots-points', function() {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'dots-points', function() {
+            map.getCanvas().style.cursor = '';
+        });
+
+        // Change cursor on hover for STG offices
+        map.on('mouseenter', 'stg-offices', function() {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'stg-offices', function() {
+            map.getCanvas().style.cursor = '';
+        });
+
+        // Change cursor on hover for STG office stars
+        map.on('mouseenter', 'stg-offices-star', function() {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'stg-offices-star', function() {
+            map.getCanvas().style.cursor = '';
+        });
     });
-  });
 
+    // Navigation dropdown functionality
+    document.getElementById('austin-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = document.getElementById('austin-menu');
+        const nashvilleMenu = document.getElementById('nashville-menu');
+        
+        // Close Nashville menu if open
+        nashvilleMenu.classList.remove('show');
+        
+        // Toggle Austin menu
+        menu.classList.toggle('show');
+    });
 
-  
+    document.getElementById('nashville-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = document.getElementById('nashville-menu');
+        const austinMenu = document.getElementById('austin-menu');
+        
+        // Close Austin menu if open
+        austinMenu.classList.remove('show');
+        
+        // Toggle Nashville menu
+        menu.classList.toggle('show');
+    });
+
+    // Handle dropdown item clicks
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('dropdown-item')) {
+            const action = e.target.getAttribute('data-action');
+            
+            // Hide any pulsing animation when flying to a city
+            hideAnimatedPoint();
+            closeCustomPopup();
+            
+            // Close all dropdowns
+            document.getElementById('austin-menu').classList.remove('show');
+            document.getElementById('nashville-menu').classList.remove('show');
+            
+            // Execute the appropriate action
+            switch(action) {
+                case 'austin-downtown':
+                    rotationDisabled = false; // Resume rotation for downtown view
+                    map.flyTo({
+                        center: [-97.7522, 30.2672], // Austin coordinates
+                        zoom: 15.5,
+                        pitch: 60,
+                        bearing: -17.6,
+                        essential: true,
+                        duration: 2000
+                    });
+                    break;
+                case 'austin-greater':
+                    rotationDisabled = true; // Disable rotation for greater region view
+                    map.flyTo({
+                        center: [-97.747498, 30.333448], // Center between Austin and Round Rock
+                        zoom: 10.5,
+                        pitch: 0,
+                        bearing: 0,
+                        essential: true,
+                        duration: 2000
+                    });
+                    break;
+                case 'nashville-downtown':
+                    rotationDisabled = false; // Resume rotation for downtown view
+                    map.flyTo({
+                        center: [-86.7816, 36.1627], // Nashville coordinates
+                        zoom: 15.5,
+                        pitch: 60,
+                        bearing: -17.6,
+                        essential: true,
+                        duration: 2000
+                    });
+                    break;
+                case 'nashville-greater':
+                    rotationDisabled = true; // Disable rotation for greater region view
+                    map.flyTo({
+                        center: [-86.7816, 36.1627], // Nashville center (adjust if needed)
+                        zoom: 12,
+                        pitch: 0,
+                        bearing: 0,
+                        essential: true,
+                        duration: 2000
+                    });
+                    break;
+            }
+            
+            // Reset the inactivity timer
+            resetInactivityTimer();
+        } else {
+            // Close all dropdowns when clicking elsewhere
+            document.getElementById('austin-menu').classList.remove('show');
+            document.getElementById('nashville-menu').classList.remove('show');
+        }
+    });
+
+    // Auto-rotation functionality
+    let userInteracting = false;
+    let rotationTimer = null;
+    let startTime = null;
+    let isAutoRotating = false; // Flag to prevent rotation events from resetting timer
+    let rotationDisabled = false; // Flag to disable rotation for greater region views
+
+    function rotateCamera(timestamp) {
+        if (userInteracting || rotationDisabled) {
+            // If user is interacting or rotation is disabled, don't rotate but keep the animation loop running
+            requestAnimationFrame(rotateCamera);
+            return;
+        }
+
+        if (startTime === null) {
+            startTime = timestamp;
+            console.log('Rotation started at timestamp:', timestamp);
+        }
+
+        // Calculate rotation: 360 degrees over 60 seconds (6 degrees per second)
+        // Divide by 1000 to convert milliseconds to seconds, then multiply by 6
+        const elapsed = (timestamp - startTime) / 1000;
+        const rotation = (elapsed * 6) % 360; // 6 degrees per second
+
+        isAutoRotating = true; // Set flag before rotating
+        map.rotateTo(rotation, {duration: 0});
+        isAutoRotating = false; // Clear flag after rotating
+        
+        requestAnimationFrame(rotateCamera);
+    }
+
+    function startRotation() {
+        // Reset start time when rotation begins
+        console.log('startRotation called - userInteracting:', userInteracting);
+        startTime = null;
+    }
+
+    function resetInactivityTimer() {
+        // Don't reset if this is triggered by auto-rotation
+        if (isAutoRotating) {
+            console.log('resetInactivityTimer called during auto-rotation - ignoring');
+            return;
+        }
+        
+        console.log('resetInactivityTimer called');
+        userInteracting = true;
+        
+        if (rotationTimer) {
+            clearTimeout(rotationTimer);
+        }
+        
+        rotationTimer = setTimeout(() => {
+            console.log('Timer expired - setting userInteracting to false');
+            userInteracting = false;
+            startRotation();
+        }, 3000); // 3 seconds for testing
+    }
+
+    // Event listeners for user interaction
+    map.on('mousedown', resetInactivityTimer);
+    map.on('wheel', resetInactivityTimer);
+    map.on('touchstart', resetInactivityTimer);
+    map.on('touchmove', resetInactivityTimer);
+    map.on('drag', resetInactivityTimer);
+    map.on('zoom', resetInactivityTimer);
+    map.on('rotate', resetInactivityTimer);
+    map.on('pitch', resetInactivityTimer);
+
+    // Also reset timer when buttons are clicked
+    document.getElementById('austin-btn').addEventListener('click', resetInactivityTimer);
+    document.getElementById('nashville-btn').addEventListener('click', resetInactivityTimer);
+
+    // Add zoom and rotation controls to the map
+    map.addControl(new maplibregl.NavigationControl({
+        visualizePitch: true,
+        visualizeRoll: true,
+        showZoom: true,
+        showCompass: true
+    }));
+
+    // Update zoom display in real-time
+    function updateZoomDisplay() {
+        const zoomDisplay = document.getElementById('zoom-display');
+        if (zoomDisplay) {
+            zoomDisplay.textContent = `Zoom: ${map.getZoom().toFixed(2)}`;
+        }
+    }
+
+    // Add zoom event listener to update display
+    map.on('zoom', updateZoomDisplay);
+    map.on('zoomend', updateZoomDisplay);
+
+    // Start the initial timer when map loads
+    map.on('load', () => {
+        // Start the rotation loop immediately
+        requestAnimationFrame(rotateCamera);
+        resetInactivityTimer();
+        
+        // Update zoom display initially
+        updateZoomDisplay();
+        
+        // Collapse attribution control by default with multiple attempts
+        const collapseAttribution = () => {
+            const attributionControl = document.querySelector('.maplibregl-ctrl-attrib');
+            if (attributionControl) {
+                if (!attributionControl.classList.contains('maplibregl-compact')) {
+                    const toggleButton = attributionControl.querySelector('.maplibregl-ctrl-attrib-button');
+                    if (toggleButton) {
+                        toggleButton.click();
+                        console.log('Attribution collapsed');
+                        return true;
+                    }
+                } else {
+                    console.log('Attribution already collapsed');
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Try multiple times with increasing delays
+        setTimeout(() => collapseAttribution(), 100);
+        setTimeout(() => collapseAttribution(), 500);
+        setTimeout(() => collapseAttribution(), 1000);
+        setTimeout(() => collapseAttribution(), 2000);
+    });
 </script>
 </body>
 </html>
